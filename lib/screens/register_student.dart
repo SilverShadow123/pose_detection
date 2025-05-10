@@ -351,12 +351,17 @@ class RegisterStudentState extends State<RegisterStudent> {
         actions: [
           IconButton(
             icon: const Icon(Icons.arrow_back),
-            onPressed:
-                () => Navigator.pushNamedAndRemoveUntil(
+            onPressed: () {
+              if (Platform.isWindows) {
+                Navigator.pushNamedAndRemoveUntil(
                   context,
                   '/home',
                   (route) => false,
-                ),
+                );
+              } else {
+                Navigator.pushNamed(context, '/home');
+              }
+            },
           ),
           IconButton(
             icon: const Icon(Icons.refresh),

@@ -35,7 +35,7 @@ class RealtimeFaceRecognitionState extends State<RealtimeFaceRecognition> {
   String _predictedName = '';
   String? _lastSentName;
   final _sheetUrl = Uri.parse(
-    'https://script.google.com/macros/s/AKfycbzC6cXfECGqTfVRiADOcGlMk913In_bPCzC9R1rkWcJWS0UX7pi160_eH_Fgjtw3InB/exec',
+    'https://script.google.com/macros/s/AKfycbxdOwEuwAgXdGfnRL27sULQ7cIldIzPbt9wIxYSYwULGdGz1N0QQEiU-l1rjxt2fn3p/exec',
   );
 
   @override
@@ -63,7 +63,7 @@ class RealtimeFaceRecognitionState extends State<RealtimeFaceRecognition> {
   Future<void> _initCamera() async {
     final cameras = await CameraPlatform.instance.availableCameras();
     final camera = cameras.firstWhere(
-      (c) => c.lensDirection == CameraLensDirection.front,
+          (c) => c.lensDirection == CameraLensDirection.front,
       orElse: () => cameras.first,
     );
     _cameraController = CameraController(
@@ -83,8 +83,8 @@ class RealtimeFaceRecognitionState extends State<RealtimeFaceRecognition> {
         );
       }
       _fallbackTimer = Timer.periodic(const Duration(milliseconds: 500), (
-        _,
-      ) async {
+          _,
+          ) async {
         try {
           final XFile file = await _cameraController!.takePicture();
           final bytes = await File(file.path).readAsBytes();
@@ -104,8 +104,9 @@ class RealtimeFaceRecognitionState extends State<RealtimeFaceRecognition> {
   Future<void> _loadSavedData() async {
     final persons = await StorageService().loadKnownPersons();
     setState(() {
-      _knownPersons.clear();
-      _knownPersons.addAll(persons);
+      _knownPersons
+        ..clear()
+        ..addAll(persons);
     });
   }
 
@@ -126,9 +127,9 @@ class RealtimeFaceRecognitionState extends State<RealtimeFaceRecognition> {
       final resized = img.copyResize(rgb, width: 112, height: 112);
       final input = List.generate(
         1,
-        (_) => List.generate(
+            (_) => List.generate(
           112,
-          (y) => List.generate(112, (x) {
+              (y) => List.generate(112, (x) {
             final p = resized.getPixel(x, y);
             return [
               (p.r - 127.5) / 127.5,
@@ -138,12 +139,14 @@ class RealtimeFaceRecognitionState extends State<RealtimeFaceRecognition> {
           }),
         ),
       );
+
       final outputTensor = _interpreter!.getOutputTensor(0);
       final shape = outputTensor.shape;
       final out = List.filled(shape[1], 0.0).reshape([1, shape[1]]);
       _interpreter!.run(input, out);
       _lastEmbedding = List<double>.from(out[0] as List);
 
+      // find best match
       String bestName = 'Unknown';
       double bestDist = double.infinity;
       _knownPersons.forEach((name, person) {
@@ -155,36 +158,46 @@ class RealtimeFaceRecognitionState extends State<RealtimeFaceRecognition> {
       });
       if (bestDist > 0.20) bestName = 'Unknown';
 
-      setState(
-        () => _predictedName = '$bestName (${bestDist.toStringAsFixed(2)})',
-      );
+      setState(() => _predictedName = '$bestName (${bestDist.toStringAsFixed(2)})');
 
+      // if recognized and not already sent, send all data
       if (bestName != 'Unknown' &&
           bestName != _lastSentName &&
           bestDist <= 0.20) {
+        final person = _knownPersons[bestName]!;
         _lastSentName = bestName;
-        _sendToSheet(bestName, bestDist);
+        _sendToSheet(person, bestDist);
       }
     } finally {
       _isProcessing = false;
     }
   }
 
-  Future<void> _sendToSheet(String name, double dist) async {
+  Future<void> _sendToSheet(PersonData person, double dist) async {
     final now = DateTime.now().toUtc().toIso8601String();
+    final payload = {
+      'id':        person.id,
+      'name':      person.name,
+      'department':person.department,
+      'section':   person.section,
+      'distance':  dist,
+      'timestamp': now,
+    };
+
     try {
       final resp = await http.post(
         _sheetUrl,
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'name': name, 'distance': dist, 'timestamp': now}),
+        body: jsonEncode(payload),
       );
-      if (resp.statusCode != 200 && kDebugMode) {
-        print('Sheet error ${resp.body}');
+      if (resp.statusCode != 200) {
+        debugPrint('Sheet error (${resp.statusCode}): ${resp.body}');
       }
     } catch (e) {
-      if (kDebugMode) print('HTTP error $e');
+      debugPrint('HTTP error: $e');
     }
   }
+
 
   double _cosineDistance(List<double> a, List<double> b) {
     double dot = 0, na = 0, nb = 0;
@@ -205,6 +218,7 @@ class RealtimeFaceRecognitionState extends State<RealtimeFaceRecognition> {
     final us = image.planes[1].bytesPerRow;
     final vs = image.planes[2].bytesPerRow;
     final pix = image.planes[1].bytesPerPixel!;
+
     for (var i = 0; i < h; i++) {
       for (var j = 0; j < w; j++) {
         final yi = i * image.planes[0].bytesPerRow + j;
@@ -213,9 +227,11 @@ class RealtimeFaceRecognitionState extends State<RealtimeFaceRecognition> {
         final vIdx = (i >> 1) * vs + (j >> 1) * pix;
         final uvU = u[uIdx] & 0xFF;
         final uvV = v[vIdx] & 0xFF;
+
         int r = (yv + 1.370705 * (uvV - 128)).toInt();
         int g = (yv - 0.337633 * (uvU - 128) - 0.698001 * (uvV - 128)).toInt();
         int b = (yv + 1.732446 * (uvU - 128)).toInt();
+
         out.setPixelRgba(
           j,
           i,
@@ -234,7 +250,6 @@ class RealtimeFaceRecognitionState extends State<RealtimeFaceRecognition> {
     _fallbackTimer?.cancel();
     _cameraController?.dispose();
     _interpreter?.close();
-
     super.dispose();
   }
 
@@ -252,12 +267,18 @@ class RealtimeFaceRecognitionState extends State<RealtimeFaceRecognition> {
         title: const Text('Real-time Face Recognition'),
         actions: [
           IconButton(
-            onPressed:
-                () => Navigator.pushNamedAndRemoveUntil(
+
+            onPressed: () {
+              if(Platform.isWindows){
+                Navigator.pushNamedAndRemoveUntil(
                   context,
                   '/home',
-                  (route) => false,
-                ),
+                      (route) => false,
+                );
+              }else{
+                Navigator.pushNamed(context, '/home');
+              }
+           },
             icon: const Icon(Icons.arrow_back),
           ),
           IconButton(
