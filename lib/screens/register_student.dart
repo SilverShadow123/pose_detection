@@ -204,9 +204,11 @@ class RegisterStudentState extends State<RegisterStudent> {
     await _storage.saveThumbnail(person.name, pngBytes);
 
     setState(() {});
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('${person.name} enrolled successfully!')),
-    );
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${person.name} enrolled successfully!')),
+      );
+    }
   }
 
   Future<void> _deletePerson(String name) async {
@@ -236,9 +238,11 @@ class RegisterStudentState extends State<RegisterStudent> {
     await _storage.deleteThumbnail(name);
 
     setState(() {});
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text('$name removed.')));
+    if (mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('$name removed.')));
+    }
   }
 
   Future<Map<String, String>?> _askForPersonDetails() async {
