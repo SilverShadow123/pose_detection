@@ -1,4 +1,3 @@
-// Data model for person
 class PersonData {
   final String name;
   final String id;
